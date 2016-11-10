@@ -78,6 +78,7 @@ func Decrypt(ciphertext []byte, passphrase string) []byte {
 	return unpadded
 }
 
+// makeKeySlice creates a slice from the salted and hashed passphrase
 func makeKeySlice(passphrase string) []byte {
 	keyBytes := makeKey(passphrase)
 	return keyBytes[:]
@@ -85,7 +86,7 @@ func makeKeySlice(passphrase string) []byte {
 
 var salt = "cmdtrack!"
 
-// Encrypt encrypts the provided data using AES-256-CBC, after generating a
+// makeKey salts and hashes the passphrase to generate a key
 func makeKey(passphrase string) [32]byte {
 	return sha256.Sum256([]byte(salt + passphrase))
 }
