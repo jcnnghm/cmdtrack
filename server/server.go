@@ -65,8 +65,22 @@ func secret(w http.ResponseWriter, r *http.Request) {
 
 func logCommand(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
+
+	secret, err := fetchSecret(c)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(r.Header["Secret"]) != 1 || r.Header["Secret"][0] != secret.SecretKey {
+		c.Debugf("Secret key mismatch")
+		http.Error(w, "Secret key invalid", http.StatusUnauthorized)
+		return
+	}
+
 	if command, err := cmd.NewCommand(r); err != nil || !command.IsValid() {
 		if err != nil {
+			c.Debugf("Failed with error: %v", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		} else {
 			http.Error(w, "Invalid command data", http.StatusInternalServerError)

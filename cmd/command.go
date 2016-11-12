@@ -65,11 +65,22 @@ func (c *Command) Send(cmdtrackURL string) error {
 	retryCount := 10
 	count := 0
 	for count < retryCount {
-		if resp, err := http.PostForm(cmdtrackURL+"command", values); err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if resp, err := postForm(cmdtrackURL+"command", values); err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return nil
 		}
 		time.Sleep(1000 * time.Millisecond)
 		count = count + 1
 	}
 	return errors.New("Failed to save")
+}
+
+func postForm(url string, values url.Values) (resp *http.Response, err error) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(values.Encode()))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Secret", Config.SharedSecret)
+	resp, err = http.DefaultClient.Do(req)
+	return
 }
