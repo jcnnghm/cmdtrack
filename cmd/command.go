@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -12,10 +13,10 @@ import (
 
 // Command represents a command that was executed
 type Command struct {
-	Command,
-	Hostname,
-	WorkingDir string
-	Timestamp int64
+	Command    string `json:"Command"`
+	Hostname   string `json:"Hostname"`
+	WorkingDir string `json:"WorkingDir"`
+	Timestamp  int64  `json:"Timestamp"`
 }
 
 // NewCommand creates a command from a request
@@ -30,6 +31,42 @@ func NewCommand(r *http.Request) (*Command, error) {
 			Timestamp:  timestamp,
 		}, nil
 	}
+}
+
+// FetchCommands fetches history from the CommandTrack server
+func FetchCommands(cmdtrackURL string) (commands []Command, err error) {
+	commands = make([]Command, 0, 10000)
+
+	req, err := http.NewRequest("GET", cmdtrackURL+"history", nil)
+	if err != nil {
+		return
+	}
+
+	req.Header.Add("Secret", Config.SharedSecret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+
+	decoder := json.NewDecoder(resp.Body)
+	err = decoder.Decode(&commands)
+	if err != nil {
+		return
+	}
+
+	for i := range commands {
+		if err = commands[i].decrypt(); err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func (c *Command) decrypt() error {
+	cmd, err := DecryptBase64(c.Command, Config.EncryptionKey)
+	c.Command = cmd
+	return err
 }
 
 // Normalize normalizes all of the fields in a command

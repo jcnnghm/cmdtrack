@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -42,7 +43,8 @@ func fetchSecret(c appengine.Context) (*Secret, error) {
 func init() {
 	r := mux.NewRouter()
 	r.HandleFunc("/secret", secret).Methods("GET")
-	r.HandleFunc("/command", logCommand).Methods("POST")
+	r.HandleFunc("/history", verifySecret(history)).Methods("GET")
+	r.HandleFunc("/command", verifySecret(logCommand)).Methods("POST")
 	http.Handle("/", r)
 }
 
@@ -63,20 +65,34 @@ func secret(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func verifySecret(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c := appengine.NewContext(r)
+
+		u := user.Current(c)
+		if u != nil && u.Admin {
+			fn(w, r)
+			return
+		}
+
+		secret, err := fetchSecret(c)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if len(r.Header["Secret"]) != 1 || r.Header["Secret"][0] != secret.SecretKey {
+			c.Debugf("Secret key mismatch")
+			http.Error(w, "Secret key invalid", http.StatusUnauthorized)
+			return
+		}
+
+		fn(w, r)
+	}
+}
+
 func logCommand(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-
-	secret, err := fetchSecret(c)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if len(r.Header["Secret"]) != 1 || r.Header["Secret"][0] != secret.SecretKey {
-		c.Debugf("Secret key mismatch")
-		http.Error(w, "Secret key invalid", http.StatusUnauthorized)
-		return
-	}
 
 	if command, err := cmd.NewCommand(r); err != nil || !command.IsValid() {
 		if err != nil {
@@ -95,9 +111,29 @@ func logCommand(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func history(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+	limit := 10000
+	q := datastore.NewQuery("HistoryLine").Ancestor(historyKey(c)).Order("-Timestamp").Limit(limit).EventualConsistency()
+	logLines := make([]cmd.Command, 0, limit)
+	if _, err := q.GetAll(c, &logLines); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	c.Debugf("Found Log Lines: %v", len(logLines))
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(logLines); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func historyKey(c appengine.Context) *datastore.Key {
+	return datastore.NewKey(c, "HistoryLog", "default_history_log", 0, nil)
+}
+
 func saveCommand(command *cmd.Command, c appengine.Context) error {
-	parentKey := datastore.NewKey(c, "HistoryLog", "default_history_log", 0, nil)
-	key := datastore.NewIncompleteKey(c, "HistoryLine", parentKey)
+	key := datastore.NewIncompleteKey(c, "HistoryLine", historyKey(c))
 	_, err := datastore.Put(c, key, command)
 	return err
 }
