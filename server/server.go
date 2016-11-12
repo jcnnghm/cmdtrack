@@ -1,95 +1,89 @@
 package server
 
 import (
-	"html/template"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/http"
-	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/jcnnghm/cmdtrack/cmd"
 
 	"appengine"
 	"appengine/datastore"
 	"appengine/user"
 )
 
-// Greeting is a temporary thing
-type Greeting struct {
-	Author  string
-	Content string
-	Date    time.Time
+// Secret holds the application secret key
+type Secret struct {
+	SecretKey string
+}
+
+// fetchSecret gets or creates a new secret in appengine, and returns it
+func fetchSecret(c appengine.Context) (*Secret, error) {
+	secretKey := datastore.NewKey(c, "Secret", "secret", 0, nil)
+	s := new(Secret)
+	if err := datastore.Get(c, secretKey, s); err != nil {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err == nil {
+			key := hex.EncodeToString(b)
+			s.SecretKey = key
+			if _, err := datastore.Put(c, secretKey, s); err != nil {
+				return nil, errors.New("Unable to save secret")
+			}
+		} else {
+			return nil, errors.New("Unable to generate secret")
+		}
+	}
+	return s, nil
 }
 
 func init() {
-	http.HandleFunc("/", root)
-	http.HandleFunc("/sign", sign)
+	r := mux.NewRouter()
+	r.HandleFunc("/secret", secret).Methods("GET")
+	r.HandleFunc("/command", logCommand).Methods("POST")
+	http.Handle("/", r)
 }
 
-// guestbookKey returns the key used for all guestbook entries.
-func guestbookKey(c appengine.Context) *datastore.Key {
-	// The string "default_guestbook" here could be varied to have multiple guestbooks.
-	return datastore.NewKey(c, "Guestbook", "default_guestbook", 0, nil)
-}
-
-func root(w http.ResponseWriter, r *http.Request) {
+// secret gets or creates a secret.  auth needs to be added to this endpoint.
+func secret(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	// Ancestor queries, as shown here, are strongly consistent with the High
-	// Replication Datastore. Queries that span entity groups are eventually
-	// consistent. If we omitted the .Ancestor from this query there would be
-	// a slight chance that Greeting that had just been written would not
-	// show up in a query.
-	q := datastore.NewQuery("Greeting").Ancestor(guestbookKey(c)).Order("-Date").Limit(10)
-	greetings := make([]Greeting, 0, 10)
-	if _, err := q.GetAll(c, &greetings); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+	u := user.Current(c)
+	if u == nil || !u.Admin {
+		http.Error(w, "Admin login only", http.StatusUnauthorized)
 		return
 	}
-	if err := guestbookTemplate.Execute(w, greetings); err != nil {
+
+	if s, err := fetchSecret(c); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		fmt.Fprintf(w, s.SecretKey)
 	}
 }
 
-var guestbookTemplate = template.Must(template.New("book").Parse(`
-<html>
-  <head>
-    <title>Go Guestbook</title>
-  </head>
-  <body>
-    {{range .}}
-      {{with .Author}}
-        <p><b>{{.}}</b> wrote:</p>
-      {{else}}
-        <p>An anonymous person wrote:</p>
-      {{end}}
-      <pre>{{.Content}}</pre>
-    {{end}}
-    <form action="/sign" method="post">
-      <div><textarea name="content" rows="3" cols="60"></textarea></div>
-      <div><input type="submit" value="Sign Guestbook"></div>
-    </form>
-  </body>
-</html>
-`))
-
-func sign(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Invalid request method.", 405)
-	} else {
-		c := appengine.NewContext(r)
-		g := Greeting{
-			Content: r.FormValue("content"),
-			Date:    time.Now(),
-		}
-		if u := user.Current(c); u != nil {
-			g.Author = u.String()
-		}
-		// We set the same parent key on every Greeting entity to ensure each Greeting
-		// is in the same entity group. Queries across the single entity group
-		// will be consistent. However, the write rate to a single entity group
-		// should be limited to ~1/second.
-		key := datastore.NewIncompleteKey(c, "Greeting", guestbookKey(c))
-		_, err := datastore.Put(c, key, &g)
+func logCommand(w http.ResponseWriter, r *http.Request) {
+	c := appengine.NewContext(r)
+	if command, err := cmd.NewCommand(r); err != nil || !command.IsValid() {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		} else {
+			http.Error(w, "Invalid command data", http.StatusInternalServerError)
 		}
-		http.Redirect(w, r, "/", http.StatusFound)
+	} else {
+		c.Debugf("Received Command: %#v", command)
+		err := saveCommand(command, c)
+		if err != nil {
+			c.Debugf("Failed with error: %v", err.Error())
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
+}
+
+func saveCommand(command *cmd.Command, c appengine.Context) error {
+	parentKey := datastore.NewKey(c, "HistoryLog", "default_history_log", 0, nil)
+	key := datastore.NewIncompleteKey(c, "HistoryLine", parentKey)
+	_, err := datastore.Put(c, key, command)
+	return err
 }

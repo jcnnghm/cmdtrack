@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"io"
 )
 
@@ -49,6 +50,21 @@ func Encrypt(data []byte, passphrase string) []byte {
 	mode.CryptBlocks(ciphertext[aes.BlockSize:], paddedData)
 
 	return ciphertext
+}
+
+// EncryptBase64 Encrypt and wrap the ouptut in Base64
+func EncryptBase64(data string, passphrase string) string {
+	return base64.StdEncoding.EncodeToString(Encrypt([]byte(data), passphrase))
+}
+
+// DecryptBase64 decrypts the Base64 encoded encrypted text
+func DecryptBase64(ciphertext string, passphrase string) (plaintext string, outErr error) {
+	if cipherbytes, err := base64.StdEncoding.DecodeString(ciphertext); err == nil {
+		plaintext = string(Decrypt(cipherbytes, passphrase))
+	} else {
+		outErr = err
+	}
+	return
 }
 
 // Decrypt decrypts the provided ciphertext, reversing the Encrypt method.

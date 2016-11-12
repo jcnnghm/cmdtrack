@@ -22,6 +22,22 @@ func TestEncrypt(t *testing.T) {
 	}
 }
 
+func TestEncryptBase64(t *testing.T) {
+	cases := []string{"exampleplaintext", "another", "t"}
+	pass := "example"
+	for _, testCase := range cases {
+		encrypted := EncryptBase64(testCase, pass)
+
+		assert.NotEqual(t, testCase, encrypted,
+			"Encrypted value should be different")
+
+		decrypted, err := DecryptBase64(encrypted, pass)
+		assert.Nil(t, err)
+		assert.Equal(t, testCase, decrypted,
+			"%v did not encrypt cleanly.", testCase)
+	}
+}
+
 func ExampleEncrypt() {
 	text := "Example Text to Encrypt"
 	pass := "Passphrase!"
