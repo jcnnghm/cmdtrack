@@ -102,6 +102,7 @@ func verifySecret(fn http.HandlerFunc) http.HandlerFunc {
 
 func logCommand(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
+	log.Debugf(c, "Log Command Started")
 
 	if command, err := cmd.NewCommand(r); err != nil || !command.IsValid() {
 		if err != nil {
@@ -123,7 +124,8 @@ func logCommand(w http.ResponseWriter, r *http.Request) {
 func history(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
 	limit := 10000
-	q := datastore.NewQuery("HistoryLine").Ancestor(historyKey(c)).Order("-Timestamp").Limit(limit).EventualConsistency()
+	log.Debugf(c, "Starting History Query")
+	q := datastore.NewQuery("HistoryLine").Order("-Timestamp").Limit(limit).EventualConsistency()
 	logLines := make([]cmd.Command, 0, limit)
 	if _, err := q.GetAll(c, &logLines); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,7 +144,8 @@ func historyKey(c context.Context) *datastore.Key {
 }
 
 func saveCommand(command *cmd.Command, c context.Context) error {
-	key := datastore.NewIncompleteKey(c, "HistoryLine", historyKey(c))
+	key := datastore.NewIncompleteKey(c, "HistoryLine", nil)
 	_, err := datastore.Put(c, key, command)
+	log.Debugf(c, "Put Command Complete")
 	return err
 }
