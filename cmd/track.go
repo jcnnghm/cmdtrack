@@ -20,6 +20,13 @@ var trackCmd = &cobra.Command{
 			os.Exit(-1)
 		}
 
+		if command.Deduplicate() {
+			if isVerbose(cmd) {
+				fmt.Println("Skipping tracking duplicate command")
+			}
+			return
+		}
+
 		err := command.Send(cmdtrackURL)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -34,5 +41,6 @@ func init() {
 	trackCmd.PersistentFlags().StringVarP(&command.Hostname, "hostname", "n", "", "Hostname the command was executed on")
 	trackCmd.PersistentFlags().Int64Var(&command.Timestamp, "timestamp", 0, "Timestamp to use for this command - sets to current time if 0")
 	trackCmd.PersistentFlags().StringVar(&cmdtrackURL, "url", "https://cmdtrack-1127.appspot.com/", "URL for the cmdtrack server")
+	trackCmd.PersistentFlags().BoolP("verbose", "v", false, "Make command verbose")
 	cmdTrack.AddCommand(trackCmd)
 }

@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -122,6 +128,39 @@ func (c *Command) Send(cmdtrackURL string) error {
 	return errors.New("Failed to save")
 }
 
+// Hash returns a hash of the command, which is useful for deduping
+func (c *Command) Hash() []byte {
+	hasher := md5.New()
+	quitOnError(io.WriteString(hasher, c.Command))
+	quitOnError(io.WriteString(hasher, c.Hostname))
+	quitOnError(io.WriteString(hasher, c.WorkingDir))
+	return hasher.Sum(nil)
+}
+
+// Deduplicate checks if the command has been written already, returning True
+// if it has been.  If it has not, the last command is updated, and false is
+// returned.
+func (c *Command) Deduplicate() bool {
+	usr, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	dir := usr.HomeDir
+	file := dir + "/.cmdtrack.last"
+
+	currentCommand := c.Hash()
+	lastCommand, err := ioutil.ReadFile(file)
+	if err == nil && bytes.Equal(currentCommand, lastCommand) {
+		return true
+	}
+
+	if err := ioutil.WriteFile(file, currentCommand, 0600); err != nil {
+		panic(err)
+	}
+
+	return false
+}
+
 func postForm(url string, values url.Values) (resp *http.Response, err error) {
 	req, err := http.NewRequest("POST", url, strings.NewReader(values.Encode()))
 	if err != nil {
@@ -131,4 +170,10 @@ func postForm(url string, values url.Values) (resp *http.Response, err error) {
 	req.Header.Add("Secret", Config.SharedSecret)
 	resp, err = http.DefaultClient.Do(req)
 	return
+}
+
+func quitOnError(_ int, err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }
