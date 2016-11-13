@@ -14,7 +14,7 @@ var historyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commands, err := FetchCommands(cmdtrackURL, isVerbose(cmd))
 		if err != nil {
-			fmt.Printlnf("History fetch error: %v", err.Error())
+			fmt.Printf("History fetch error: %v\n", err.Error())
 			os.Exit(-1)
 		}
 
