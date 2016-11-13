@@ -32,6 +32,7 @@ func init() {
 	trackCmd.PersistentFlags().StringVarP(&command.WorkingDir, "workdir", "d", "", "Working directory command was executed from")
 	trackCmd.PersistentFlags().StringVarP(&command.Command, "command", "c", "", "Command that was executed")
 	trackCmd.PersistentFlags().StringVarP(&command.Hostname, "hostname", "n", "", "Hostname the command was executed on")
+	trackCmd.PersistentFlags().Int64Var(&command.Timestamp, "timestamp", 0, "Timestamp to use for this command - sets to current time if 0")
 	trackCmd.PersistentFlags().StringVar(&cmdtrackURL, "url", "https://cmdtrack-1127.appspot.com/", "URL for the cmdtrack server")
 	cmdTrack.AddCommand(trackCmd)
 }
