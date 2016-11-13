@@ -12,7 +12,7 @@ var historyCmd = &cobra.Command{
 	Short:   "Output the recent combined history",
 	Example: "cmdtrack history --url=http://localhost:8080/",
 	Run: func(cmd *cobra.Command, args []string) {
-		commands, err := FetchCommands(cmdtrackURL)
+		commands, err := FetchCommands(cmdtrackURL, isVerbose(cmd))
 		if err != nil {
 			fmt.Println("History fetch error: %v", err.Error())
 			os.Exit(-1)
@@ -26,5 +26,14 @@ var historyCmd = &cobra.Command{
 
 func init() {
 	historyCmd.PersistentFlags().StringVar(&cmdtrackURL, "url", "https://cmdtrack-1127.appspot.com/", "URL for the cmdtrack server")
+	historyCmd.PersistentFlags().BoolP("verbose", "v", false, "Make command verbose")
 	cmdTrack.AddCommand(historyCmd)
+}
+
+func isVerbose(cmd *cobra.Command) bool {
+	verbose, err := cmd.PersistentFlags().GetBool("verbose")
+	if err != nil {
+		panic(err)
+	}
+	return verbose
 }

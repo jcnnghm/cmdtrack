@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,9 +35,12 @@ func NewCommand(r *http.Request) (*Command, error) {
 }
 
 // FetchCommands fetches history from the CommandTrack server
-func FetchCommands(cmdtrackURL string) (commands []Command, err error) {
+func FetchCommands(cmdtrackURL string, verbose bool) (commands []Command, err error) {
 	commands = make([]Command, 0, 10000)
 
+	if verbose {
+		fmt.Println("Starting request to fetch commands")
+	}
 	req, err := http.NewRequest("GET", cmdtrackURL+"history", nil)
 	if err != nil {
 		return
@@ -48,10 +52,16 @@ func FetchCommands(cmdtrackURL string) (commands []Command, err error) {
 		return
 	}
 
+	if verbose {
+		fmt.Println("Request complete, parsing...")
+	}
 	decoder := json.NewDecoder(resp.Body)
 	err = decoder.Decode(&commands)
 	if err != nil {
 		return
+	}
+	if verbose {
+		fmt.Println("Parsing complete, decrypting...")
 	}
 
 	for i := range commands {
