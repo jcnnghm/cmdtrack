@@ -57,6 +57,7 @@ func FetchCommands(cmdtrackURL string, verbose bool) (commands []Command, err er
 	}
 	decoder := json.NewDecoder(resp.Body)
 	err = decoder.Decode(&commands)
+	resp.Body.Close()
 	if err != nil {
 		return
 	}
