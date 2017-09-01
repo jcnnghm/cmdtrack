@@ -123,7 +123,7 @@ func logCommand(w http.ResponseWriter, r *http.Request) {
 
 func history(w http.ResponseWriter, r *http.Request) {
 	c := appengine.NewContext(r)
-	limit := 10000
+	limit := 1000
 	log.Debugf(c, "Starting History Query")
 	q := datastore.NewQuery("HistoryLine").Order("-Timestamp").Limit(limit).EventualConsistency()
 	logLines := make([]cmd.Command, 0, limit)
